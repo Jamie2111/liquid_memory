@@ -1,0 +1,121 @@
+# Liquid Memory paranoid-tier ignore file.
+
+# --- Binary and GPU artifacts ---
+*.a
+*.bin
+*.cubin
+*.dylib
+*.fatbin
+*.lib
+*.o
+*.obj
+*.ptx
+*.pt2
+*.so
+*.dll
+*.exe
+*.out
+
+# --- AOT/Triton/compiled kernel output ---
+*.ttir
+*.ttgir
+*.ll
+*.mlir
+*.s
+*.sass
+*.cu
+*.cuh
+.triton/
+triton_cache/
+**/.triton/
+**/triton_cache/
+**/.cache/triton/
+**/torchinductor_*/
+**/aoti_compile*/
+**/aot_inductor*/
+
+# --- Secrets and local environment ---
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.hex
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+known_hosts
+secrets/
+.secrets/
+
+# --- Python caches and build products ---
+__pycache__/
+*.py[cod]
+*.pyc
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- Local demo and test payloads ---
+*.pdf
+payload.json
+nuclear_test.txt
+demo_test.txt
+
+# --- Local tooling and editor state ---
+.DS_Store
+._*
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- Logs and temporary files ---
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+stress_report.md
+
+# --- Nested repositories should never be vendored here ---
+**/.git/
+liquid_memory_backend/
+
+# --- MANDATORY EXCEPTIONS FOR PUBLIC DISTRIBUTION ---
+# The four files inside dist_public/ are the entire point of this repo.
+# Override the *.so / *.pt2 / build-dir ignores so they actually get
+# tracked. Anything ELSE under dist_public/ stays ignored (no debug
+# builds, no .o files, no auth sources sneaking in).
+!dist_public/
+!dist_public/AOTI_METADATA.json
+!dist_public/LiquidMemory_AOTI.pt2
+!dist_public/MANIFEST.md
+!dist_public/liquid_memory_auth.so
+
+# Top-level distribution files.
+!requirements.txt
+!README.md
+!README_INTEGRATION.md
+!liquid_proxy.py

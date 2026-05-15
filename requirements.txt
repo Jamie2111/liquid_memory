@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+vllm
+litellm
+pydantic
+torch
+python-dotenv
+# transformers + requests are used by benchmark/benchmark_vram.py.
+# Pinning is intentionally loose so the benchmark works against
+# whatever HF stack the user already has installed.
+transformers
+requests

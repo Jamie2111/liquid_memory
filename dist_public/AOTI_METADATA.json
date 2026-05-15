@@ -1,0 +1,13 @@
+{
+  "artifact_kind": "pt2",
+  "batch": 1,
+  "compile_dtype": "float32",
+  "d_conv": 4,
+  "d_model": 512,
+  "d_state": 16,
+  "dt_rank": null,
+  "expand": 2,
+  "expected_input_dtype": "float32",
+  "scan_chunk_size": 256,
+  "seq_len": 65536
+}
