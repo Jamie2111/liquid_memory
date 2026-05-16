@@ -1,0 +1,112 @@
+# =============================================================================
+# Liquid Memory, Python package metadata.
+# -----------------------------------------------------------------------------
+# Build + publish flow:
+#
+#     python -m pip install --upgrade build twine
+#     python -m build               # produces dist/liquid_memory-*.{tar.gz,whl}
+#     python -m twine upload dist/* # publishes to PyPI (needs ~/.pypirc)
+#
+# Local install for development:
+#
+#     python -m pip install -e ".[dev]"
+#     liquid-memory --help
+#
+# End-user install path (the headline "one command" promise on the site):
+#
+#     pip install liquid-memory
+#     liquid-memory start
+#
+# vLLM is an OPTIONAL extra because it is Linux+CUDA only. macOS dev work
+# imports the proxy module without vLLM via the guarded import in proxy.py;
+# the gateway raises a clear error if a real inference call is attempted
+# without vLLM available.
+# =============================================================================
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "liquid-memory"
+version = "1.0.0"
+description = "Lossless prompt compression as a drop-in OpenAI-compatible proxy."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [
+  { name = "Jamie Obala", email = "jamieobala2028@u.northwestern.edu" },
+  { name = "Selina Sun", email = "selinasun2028@u.northwestern.edu" },
+]
+keywords = [
+  "llm", "compression", "openai", "proxy", "kv-cache",
+  "long-context", "inference", "cost-optimization",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Internet :: Proxy Servers",
+]
+
+# Core dependencies that must work on every platform. vLLM is opt-in so
+# macOS dev installs do not fail (vLLM is Linux+CUDA only).
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.30",
+  "litellm>=1.51",
+  "pydantic>=2.5",
+  "python-dotenv>=1.0",
+  "transformers>=4.40",
+  "torch>=2.3",
+  "requests>=2.31",
+]
+
+[project.optional-dependencies]
+# Production-grade GPU serving. Skip on macOS / Windows / GPU-less Linux.
+vllm = ["vllm>=0.6"]
+# Stateful caching backends (item #8 of the productisation roadmap).
+# SQLite ships with Python; redis is opt-in for multi-host deployments.
+cache = ["redis>=5.0"]
+# Developer tooling.
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.23",
+  "ruff>=0.5",
+  "build>=1.2",
+  "twine>=5.1",
+]
+
+[project.urls]
+Homepage = "https://liquid-memory.vercel.app"
+Repository = "https://github.com/Jamie2111/liquid_memory"
+Issues = "https://github.com/Jamie2111/liquid_memory/issues"
+Documentation = "https://github.com/Jamie2111/liquid_memory#readme"
+
+# This is the line that makes `liquid-memory start` work after pip install.
+[project.scripts]
+liquid-memory = "liquid_memory.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["liquid_memory*"]
+exclude = ["tests*", "benchmark*", "dist_public*"]
+
+# Include the auth shared-object + AOTI artifact in the wheel so the gateway
+# can find them at runtime. Without this they would be left out of the
+# tarball and the gateway would fail to start after `pip install`.
+[tool.setuptools.package-data]
+"liquid_memory" = [
+  "../dist_public/*.so",
+  "../dist_public/*.pt2",
+  "../dist_public/*.json",
+  "../dist_public/MANIFEST.md",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra -q"

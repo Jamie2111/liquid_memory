@@ -81,6 +81,54 @@ Liquid Memory is designed to produce **up to 99% token compression** before the 
 
 The local stage is optimized for throughput with **vLLM PagedAttention**, which improves GPU memory efficiency and keeps large-document extraction fast enough for live enterprise workflows. The result is a system that lowers cloud spend, improves privacy posture, and still preserves answer quality by sending the synthesis model only what it needs.
 
+## Install in one command
+
+Two installation paths, both end-to-end in roughly 60 seconds on a clean
+machine. Pick whichever matches how your team ships software.
+
+### Path A: `pip` (recommended for most users)
+
+```bash
+pip install liquid-memory
+export OPENAI_API_KEY="sk-..."        # or ANTHROPIC_API_KEY, etc.
+export SYNTHESIS_MODEL="gpt-4.1"      # any LiteLLM-supported model
+liquid-memory start
+```
+
+The gateway listens on `http://localhost:8000`. Point any OpenAI client at
+`http://localhost:8000/v1` and your existing `chat.completions.create(...)`
+calls keep working unchanged.
+
+The CLI also exposes `liquid-memory status` for a health-check probe and
+`liquid-memory --help` for the full subcommand surface. Power users who
+want gunicorn / hypercorn / their own ASGI server can skip the CLI and
+run `uvicorn liquid_memory.proxy:app --host 0.0.0.0 --port 8000` directly.
+
+### Path B: Docker (recommended for CI, regulated environments, or air-gapped installs)
+
+```bash
+docker run --rm -p 8000:8000 \
+  -e OPENAI_API_KEY="sk-..." \
+  -e SYNTHESIS_MODEL="gpt-4.1" \
+  liquidmemory/proxy:latest
+```
+
+For long-running deployments use the bundled `docker-compose.yml`: drop
+your provider keys into `.env`, then `docker compose up -d`. A
+`HEALTHCHECK` ships in the image, so `docker compose ps` reports the
+container as healthy once the gateway is ready.
+
+GPU image (with vLLM baked in for fully-local extraction):
+
+```bash
+docker build --build-arg BASE=nvidia/cuda:12.4-runtime-ubuntu22.04 \
+             --build-arg VLLM_EXTRA=vllm \
+             -t liquidmemory/proxy:gpu .
+docker run --rm --gpus all -p 8000:8000 \
+  -e OPENAI_API_KEY="sk-..." \
+  liquidmemory/proxy:gpu
+```
+
 ## Prove It On Your Own GPU (≤ 5 min)
 
 Don't take the chart on the website at face value. Reproduce it:
@@ -88,14 +136,14 @@ Don't take the chart on the website at face value. Reproduce it:
 ```bash
 git clone https://github.com/Jamie2111/liquid_memory.git
 cd liquid_memory
-pip install -r requirements.txt
-huggingface-cli login   # Llama-3.1-8B is gated; accept the license once
+pip install -e .                       # editable install picks up local changes
+huggingface-cli login                  # Llama-3.1-8B is gated; accept once
 
-# Terminal A - start the proxy (downloads Mistral-7B on first run)
-export GEMINI_API_KEY="any-string-here"   # dry_run skips the synthesis call
-uvicorn liquid_proxy:app --host 0.0.0.0 --port 8000
+# Terminal A: start the proxy (downloads Mistral-7B on first run)
+export GEMINI_API_KEY="any-string-here"  # dry_run skips the synthesis call
+liquid-memory start
 
-# Terminal B - run the benchmark
+# Terminal B: run the benchmark
 python benchmark.py
 ```
 
@@ -175,7 +223,7 @@ pip install fastapi uvicorn litellm requests openai torch transformers pydantic 
 # Stub mode + dry_run = pure OpenAI-compat wiring test
 export LIQUID_PROXY_STUB_EXTRACTION=1
 export GEMINI_API_KEY="any-string"
-uvicorn liquid_proxy:app --port 8000 &
+uvicorn liquid_memory.proxy:app --port 8000 &
 python test_openai_compat.py    # all four asserts should pass in ~3 seconds
 ```
 
@@ -185,7 +233,7 @@ python test_openai_compat.py    # all four asserts should pass in ~3 seconds
 export GEMINI_API_KEY="your-gemini-api-key"
 export SYNTHESIS_MODEL="gemini/gemini-3.1-flash-lite"
 
-uvicorn liquid_proxy:app --host 0.0.0.0 --port 8000
+uvicorn liquid_memory.proxy:app --host 0.0.0.0 --port 8000
 ```
 
 The proxy now exposes two POST endpoints. Pick the one that matches the integration shape you want.
@@ -259,7 +307,7 @@ vllm serve deepseek-ai/DeepSeek-V3 \
 export OPENAI_API_KEY="not-used-but-litellm-requires-the-var"
 export OPENAI_API_BASE="http://localhost:9000/v1"
 export SYNTHESIS_MODEL="openai/deepseek-ai/DeepSeek-V3"
-uvicorn liquid_proxy:app --host 0.0.0.0 --port 8000
+uvicorn liquid_memory.proxy:app --host 0.0.0.0 --port 8000
 ```
 
 Now the proxy reads the document with Mistral (locally), extracts a compressed fact pack, and forwards the pack to DeepSeek (locally). Nothing leaves the host.
@@ -297,18 +345,26 @@ The trade-off is GPU footprint: you need enough VRAM to host both the extraction
 
 ```text
 liquid_memory/
-├── benchmark.py                 # 50-line zero-trust VRAM proof (Llama-3.1-8B)
-├── liquid_proxy.py              # FastAPI proxy (Mode 1)
+├── liquid_memory/                # Installable Python package
+│   ├── __init__.py               # Re-exports the FastAPI app for `uvicorn liquid_memory:app`
+│   ├── proxy.py                  # The FastAPI proxy (Mode 1)
+│   └── cli.py                    # `liquid-memory` console script
+├── benchmark.py                  # 50-line zero-trust VRAM proof (Llama-3.1-8B)
 ├── benchmark/
-│   └── benchmark_vram.py        # Configurable harness (--model, --tokens, etc.)
-├── dist_public/                 # AOT artifacts (Mode 2, license-gated)
+│   └── benchmark_vram.py         # Configurable harness (--model, --tokens, etc.)
+├── dist_public/                  # AOT artifacts (Mode 2, license-gated)
 │   ├── LiquidMemory_AOTI.pt2
 │   ├── liquid_memory_auth.so
 │   ├── AOTI_METADATA.json
 │   └── MANIFEST.md
-├── README.md                    # this file
-├── README_INTEGRATION.md        # Mode 2 - attention-library integration guide
-├── requirements.txt
+├── tests/                        # Offline pytest suite (mocks vLLM + torch.cuda)
+├── pyproject.toml                # Package metadata + `liquid-memory` entry point
+├── Dockerfile                    # Two-stage container build
+├── docker-compose.yml            # One-command deploy
+├── .github/workflows/install.yml # CI: pip + docker install matrix
+├── README.md                     # this file
+├── README_INTEGRATION.md         # Mode 2 - attention-library integration guide
+├── requirements.txt              # Legacy req file (pyproject.toml is the source of truth)
 └── .gitignore
 ```
 

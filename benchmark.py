@@ -14,7 +14,7 @@ Setup
 
 In a SEPARATE terminal, start the Liquid Memory proxy first:
     export GEMINI_API_KEY="any-string"   # dry_run skips synthesis
-    uvicorn liquid_proxy:app --host 0.0.0.0 --port 8000
+    uvicorn liquid_memory.proxy:app --host 0.0.0.0 --port 8000
 
 Then run this script:
     python benchmark.py

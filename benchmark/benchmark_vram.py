@@ -57,7 +57,7 @@
 #   # 2. Start the Liquid Memory proxy in a separate terminal.
 #   #    (uvicorn loads Mistral-7B locally; first run downloads ~14 GB.)
 #   export GEMINI_API_KEY="..."   # any provider key; dry_run skips synthesis
-#   uvicorn liquid_proxy:app --host 0.0.0.0 --port 8000
+#   uvicorn liquid_memory.proxy:app --host 0.0.0.0 --port 8000
 #
 #   # 3. Run the benchmark.
 #   python benchmark/benchmark_vram.py
@@ -280,7 +280,7 @@ def compress_via_proxy(
             f"\n[fatal] could not reach Liquid Memory proxy at {proxy_url}\n\n"
             "Start the proxy in a separate terminal:\n"
             "    export GEMINI_API_KEY=...   # any provider key; dry_run skips synthesis\n"
-            "    uvicorn liquid_proxy:app --host 0.0.0.0 --port 8000\n\n"
+            "    uvicorn liquid_memory.proxy:app --host 0.0.0.0 --port 8000\n\n"
             "Then re-run this script. Pass --baseline-only to skip the\n"
             "Liquid Memory side entirely (you'll only see the O(N^2)\n"
             "baseline number).\n"

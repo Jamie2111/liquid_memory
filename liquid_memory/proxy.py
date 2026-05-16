@@ -60,7 +60,7 @@ except ImportError as _vllm_exc:  # pragma: no cover - environment-specific
     _VLLM_IMPORT_ERROR = _vllm_exc
 
 
-logger = logging.getLogger("liquid_proxy")
+logger = logging.getLogger("liquid_memory.proxy")
 logging.basicConfig(
     level=os.environ.get("LIQUID_PROXY_LOG_LEVEL", "INFO").upper(),
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -1459,4 +1459,4 @@ async def openai_chat_completions(
 if __name__ == "__main__":
     import uvicorn
     settings = ProxySettings.from_env()
-    uvicorn.run("liquid_proxy:app", host=settings.host, port=settings.port)
+    uvicorn.run("liquid_memory.proxy:app", host=settings.host, port=settings.port)

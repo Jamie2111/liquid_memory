@@ -84,7 +84,10 @@ _install_mocks()
 # any working directory (CI, repo root, tests/ dir, etc.).
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, _REPO_ROOT)
-import liquid_proxy as lm  # noqa: E402
+# Module was moved from top-level `liquid_proxy` to `liquid_memory.proxy`
+# in the 1.0 packaging refactor. The `as lm` alias keeps the rest of the
+# test file unchanged.
+from liquid_memory import proxy as lm  # noqa: E402
 
 
 # ---------------------------------------------------------------------
