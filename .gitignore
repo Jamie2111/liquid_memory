@@ -86,6 +86,7 @@ Thumbs.db
 Desktop.ini
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
 *~
