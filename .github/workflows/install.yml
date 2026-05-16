@@ -1,0 +1,145 @@
+# =============================================================================
+# CI workflow: prove `pip install liquid-memory` and `docker run liquidmemory`
+# actually work on the platforms we claim to support.
+# -----------------------------------------------------------------------------
+# This is the single most valuable CI workflow in the repo because the
+# claim on the website ("install in one command") becomes a regression
+# the moment any of the following silently break:
+#
+#   1. Renaming a module without updating pyproject.toml's setuptools.packages
+#   2. Adding a new dependency that has no wheel on macOS / Windows
+#   3. Bumping Python required-version without testing the actual minimum
+#   4. Breaking the CLI entry point (typo in `[project.scripts]`)
+#   5. Forgetting to ship dist_public/ artifacts in the wheel
+#
+# Each of these failure modes shows up as a red CI build on this workflow
+# instead of as a customer hitting "pip install failed" in their terminal.
+# =============================================================================
+
+name: install
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Manual trigger for spot-checks before tagging a release.
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: pip install on a clean container, then smoke-test the CLI.
+  # Matrix covers the OS + Python combos we list as supported.
+  # ---------------------------------------------------------------------------
+  pip-install:
+    name: "pip install · ${{ matrix.os }} · py${{ matrix.python-version }}"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build the wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel --outdir dist
+
+      - name: Install from the freshly-built wheel
+        # We install from the wheel (not `pip install -e .`) because that
+        # is the exact thing end users will do when we publish to PyPI.
+        # Installing from the source tree masks packaging mistakes (e.g.
+        # forgotten data files) that only show up in a real install.
+        run: |
+          python -m pip install dist/*.whl
+
+      - name: Smoke-test the CLI surface
+        # These do not actually start the gateway (uvicorn would block
+        # the runner). They prove the entry-point script registered and
+        # the package imports without error on this OS/Python combo.
+        run: |
+          liquid-memory --version
+          liquid-memory --help
+          liquid-memory start --help
+          liquid-memory status --help
+          liquid-memory version
+
+      - name: Import-check the proxy module
+        # If any of the proxy's transitive imports fail on this platform
+        # (e.g. a Linux-only sub-dep), this catches it here instead of
+        # at the customer's first request.
+        run: |
+          python -c "from liquid_memory import app; print('import ok, app=' + repr(app))"
+
+      - name: Run offline pytest suite
+        # The proxy's heavy deps (vllm, torch.cuda) are mocked inside
+        # tests/test_openai_compat_offline.py so this works on CI runners
+        # without GPUs.
+        run: |
+          python -m pip install pytest
+          python -m pytest tests/ -v
+
+  # ---------------------------------------------------------------------------
+  # Job 2: build the Docker image and smoke-test the same CLI surface
+  # inside the container. Only runs on Linux because docker/build-push-action
+  # uses the Linux runner.
+  # ---------------------------------------------------------------------------
+  docker-build:
+    name: "docker build + smoke-test"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: liquidmemory/proxy:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test the CLI inside the container
+        # `--entrypoint` overrides Dockerfile's ENTRYPOINT to run the
+        # CLI in one-shot mode instead of starting the gateway. This
+        # proves the install completed and the CLI is callable; the
+        # actual `liquid-memory start` path is covered by the live
+        # uvicorn check below.
+        run: |
+          docker run --rm --entrypoint liquid-memory liquidmemory/proxy:ci --version
+          docker run --rm --entrypoint liquid-memory liquidmemory/proxy:ci --help
+          docker run --rm --entrypoint liquid-memory liquidmemory/proxy:ci start --help
+
+      - name: Live healthcheck via docker compose
+        # Boot the container in the background, wait for the HEALTHCHECK
+        # to flip to healthy, hit /healthz from the host. Tears down
+        # at the end. If this fails, customers running `docker run`
+        # would see the same failure.
+        run: |
+          docker run -d --rm --name lm-test -p 8000:8000 \
+            -e SYNTHESIS_MODEL=stub \
+            liquidmemory/proxy:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/healthz; then
+              echo "healthz OK after ${i}s"
+              docker stop lm-test
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "healthz never came up in 30s, dumping container logs:"
+          docker logs lm-test
+          docker stop lm-test
+          exit 1
