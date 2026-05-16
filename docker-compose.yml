@@ -1,0 +1,39 @@
+# =============================================================================
+# Liquid Memory, docker-compose for the common dev/eval case.
+# -----------------------------------------------------------------------------
+# Run:
+#     docker compose up                      # foreground
+#     docker compose up -d                   # detached
+#     docker compose logs -f liquid-memory   # follow logs
+#     docker compose down                    # stop + remove
+#
+# Provider keys: put them in a .env file in this directory (gitignored).
+# Minimum viable .env:
+#     OPENAI_API_KEY=sk-...
+#     SYNTHESIS_MODEL=gpt-4.1
+#
+# Point your OpenAI client at http://localhost:8000/v1 from the host.
+# =============================================================================
+
+services:
+  liquid-memory:
+    image: liquidmemory/proxy:latest
+    # If you have not pushed an image yet, swap `image:` for `build: .`
+    # and `docker compose up` will build from this directory.
+    # build: .
+    container_name: liquid-memory
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      HYBRID_PROXY_HOST: "0.0.0.0"
+      HYBRID_PROXY_PORT: "8000"
+      LIQUID_PROXY_LOG_LEVEL: "INFO"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
