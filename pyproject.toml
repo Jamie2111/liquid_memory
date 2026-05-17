@@ -28,7 +28,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "liquid-memory"
+name = "liquid-memory-proxy"
 version = "1.0.0"
 description = "Lossless prompt compression as a drop-in OpenAI-compatible proxy."
 readme = "README.md"

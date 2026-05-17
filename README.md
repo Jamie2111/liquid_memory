@@ -89,7 +89,7 @@ machine. Pick whichever matches how your team ships software.
 ### Path A: `pip` (recommended for most users)
 
 ```bash
-pip install liquid-memory
+pip install liquid-memory-proxy
 export OPENAI_API_KEY="sk-..."        # or ANTHROPIC_API_KEY, etc.
 export SYNTHESIS_MODEL="gpt-4.1"      # any LiteLLM-supported model
 liquid-memory start
