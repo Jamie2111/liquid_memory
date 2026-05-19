@@ -1247,21 +1247,21 @@ class HybridProxyService:
 
         Brackets are applied marginally (income-tax style):
 
-            $0     – $500     →  15%   ("starter")
-            $500   – $5,000   →  13%   ("growth")
-            $5,000 +          →  11%   ("enterprise"; negotiable down
-                                        to 8% on annual commits)
+            $0     to $500    ->  20%   ("starter")
+            $500   to $5,000  ->  18%   ("growth")
+            $5,000 +          ->  15%   ("enterprise"; negotiable down
+                                         to 13% on annual commits)
 
         Worked example, savings = $5,000:
-            first  $500   × 15%  =  $75.00
-            next   $4,500 × 13%  = $585.00
-            total                = $660.00
-            effective rate       =  13.2%
+            first  $500   x 20%  = $100.00
+            next   $4,500 x 18%  = $810.00
+            total                = $910.00
+            effective rate       =  18.2%
         """
         tiers = (
-            (500.0,    0.15),
-            (5_000.0,  0.13),
-            (float("inf"), 0.11),
+            (500.0,    0.20),
+            (5_000.0,  0.18),
+            (float("inf"), 0.15),
         )
         owed = 0.0
         remaining = max(0.0, float(savings_usd))
