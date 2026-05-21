@@ -388,6 +388,7 @@ class ProxySettings:
     openai_timeout_seconds: float
     openai_temperature: float
     strict_liquid_auth: bool
+    skip_liquid_auth: bool
     auth_library_path: Optional[Path]
     host: str
     port: int
@@ -456,6 +457,7 @@ class ProxySettings:
             openai_timeout_seconds=env_float("OPENAI_TIMEOUT_SECONDS", 90.0),
             openai_temperature=env_float("OPENAI_TEMPERATURE", 0.1),
             strict_liquid_auth=env_bool("STRICT_LIQUID_AUTH", False),
+            skip_liquid_auth=env_bool("LM_SKIP_AUTH", False),
             auth_library_path=auth_path,
             host=os.environ.get("HYBRID_PROXY_HOST", "0.0.0.0"),
             port=env_int("HYBRID_PROXY_PORT", 8000),
@@ -1128,6 +1130,19 @@ class HybridProxyService:
             # end-to-end with no GPU.
             self.auth_library_path = None
             self.extractor = StubExtractionEngine(settings)
+        elif settings.skip_liquid_auth:
+            # LM_SKIP_AUTH=1: evaluation / self-host mode. Skip the
+            # licensing gate (auth-library load plus placeholder check)
+            # entirely. The real GPU extractor still loads and runs; only
+            # the signed-launch check is bypassed. This is the supported
+            # way to run an eval without the auth shared library, and it
+            # replaces the older approach of monkey-patching this file.
+            logger.warning(
+                "LM_SKIP_AUTH=1: skipping the Liquid Memory auth library "
+                "(evaluation mode). Not for production licensing."
+            )
+            self.auth_library_path = None
+            self.extractor = LocalExtractionEngine(settings)
         else:
             self.auth_library_path = _load_liquid_memory_auth_library(settings)
             _run_placeholder_auth_check(settings.strict_liquid_auth)

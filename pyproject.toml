@@ -29,7 +29,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "liquid-memory-proxy"
-version = "1.0.0"
+version = "1.0.1"
 description = "Lossless prompt compression as a drop-in OpenAI-compatible proxy."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -61,14 +61,19 @@ dependencies = [
   "litellm>=1.51",
   "pydantic>=2.5",
   "python-dotenv>=1.0",
-  "transformers>=4.40",
+  "transformers>=4.40,<5",
   "torch>=2.3",
   "requests>=2.31",
 ]
 
 [project.optional-dependencies]
 # Production-grade GPU serving. Skip on macOS / Windows / GPU-less Linux.
-vllm = ["vllm>=0.6"]
+# vllm is pinned to the 0.10.x line on purpose: it is built for CUDA 12.x,
+# which is what the large majority of GPU hosts still run. vllm 0.21+
+# requires a CUDA 13 driver and fails to start on a CUDA 12.8 host.
+# hf_transfer is included so the install also works on hosts that set
+# HF_HUB_ENABLE_HF_TRANSFER=1 (e.g. RunPod).
+vllm = ["vllm>=0.10.2,<0.11", "hf_transfer"]
 # Stateful caching backends (item #8 of the productisation roadmap).
 # SQLite ships with Python; redis is opt-in for multi-host deployments.
 cache = ["redis>=5.0"]
