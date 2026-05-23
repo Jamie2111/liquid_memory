@@ -21,14 +21,24 @@ Open and runnable from this repo. See **Quickstart** below.
 
 ### Mode 2 — The attention library
 
-For teams **training or self-hosting their own LLM** who want linear-time attention so they can fit 128K-token contexts on a single H100 (where standard `MultiheadAttention` OOMs past 32K).
+For teams **training or self-hosting their own LLM** who want a linear-time sequence mixer with a measurably faster forward pass than fused attention at long context.
 
-- Drop-in replacement for `torch.nn.MultiheadAttention`. One line in a PyTorch model.
-- Parallel mode for prefill + `O(1)`-per-token recurrent decode.
-- BF16 in, BF16 out. Precision-safe mode auto-engaged above 64K tokens.
-- Compatible with `torch.compile`. Works with Hugging Face Llama / Mistral / Qwen attention by patching `self_attn`.
+**Measured on a single NVIDIA H100 80GB** (`d_model=512`, fp32, batch=1, single block, against FlashAttention-2 via `torch.scaled_dot_product_attention`):
 
-Licensed separately (compiled kernel + Ed25519 license key). See [`README_INTEGRATION.md`](./README_INTEGRATION.md) for the full integration guide, or email the founders to request access.
+| seq_len | FlashAttention-2 | Mode 2 AOTI | Speedup |
+|---------|------------------|-------------|---------|
+| 4,096   |  12.3 ms         |  2.5 ms     | 4.9x    |
+| 16,384  | 102.9 ms         | 10.1 ms     | 10.2x   |
+| 32,768  | 346.1 ms         | 20.5 ms     | 16.9x   |
+| 65,536  | 1,291 ms         | 34.0 ms     | 38.0x   |
+
+L=65,536 measured on an H200 141GB (the H100's 80GB is not enough headroom for the eager-reference forward at that length). See `dist_public/LiquidMemory_AOTI_sm_90_L*_trained.pt2` for the per-seq-length compiled artifacts.
+
+- **Drop-in replacement for `torch.nn.MultiheadAttention`**: `from liquid_memory import LiquidMemory; self.attn = LiquidMemory(d_model, n_heads, batch_first=True)`, then `out, _ = self.attn(x, x, x, is_causal=True)`. Same call shape, same return tuple.
+- **Per-architecture compiled artifacts**: ships pre-built `.pt2` files for sm_89 (RTX 40-series, L40) and sm_90 (H100, H200). The runtime loader picks the right binary for the host GPU automatically.
+- **Honest trade-off**: at production model width the SSM state expansion is ~17x heavier per token than fused attention, so Mode 2 is a **latency** win, not a memory win, in this configuration. Both methods fit comfortably on a single GPU at all measured lengths.
+
+A preliminary TinyStories quality result on a 6-layer character-level model puts Mode 2 at validation perplexity 2.17 versus 2.75 for causal attention at equal training configuration. This is not yet a full-scale language modeling evaluation; see [`README_INTEGRATION.md`](./README_INTEGRATION.md) for the integration guide and the [paper](https://liquid-memory.vercel.app/paper) §5.4 for the methodology behind the table above.
 
 ---
 

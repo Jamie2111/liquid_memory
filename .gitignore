@@ -105,18 +105,22 @@ stress_report.md
 liquid_memory_backend/
 
 # --- MANDATORY EXCEPTIONS FOR PUBLIC DISTRIBUTION ---
-# The four files inside dist_public/ are the entire point of this repo.
+# The files inside dist_public/ are the entire point of this repo.
 # Override the *.so / *.pt2 / build-dir ignores so they actually get
 # tracked. Anything ELSE under dist_public/ stays ignored (no debug
 # builds, no .o files, no auth sources sneaking in).
 !dist_public/
 !dist_public/AOTI_METADATA.json
-!dist_public/LiquidMemory_AOTI.pt2
 !dist_public/MANIFEST.md
 !dist_public/liquid_memory_auth.so
+# Per-arch compiled artifacts (sm_XX_LYYYYY[_tag].pt2).
+!dist_public/LiquidMemory_AOTI_*.pt2
 
 # Top-level distribution files.
 !requirements.txt
 !README.md
 !README_INTEGRATION.md
 !liquid_proxy.py
+# The MultiheadAttention shim + runtime loader for the Mode 2 artifact.
+!liquid_memory.py
+!liquid_memory_loader.py

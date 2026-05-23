@@ -28,27 +28,35 @@ Transformers, decoder loops, long-context training).
 ## 1. Installation
 
 ```bash
-pip install torch>=2.3 cryptography
+pip install torch>=2.8
 ```
 
 Place the Liquid Memory distribution in your project:
 
 ```
 your_project/
-├── liquid_memory.py
-└── bin/
-    ├── LiquidMemory_AOTI.so
-    └── liquid_memory_auth.so
+├── liquid_memory.py            # the MultiheadAttention shim
+├── liquid_memory_loader.py     # picks the .pt2 matching the host GPU
+└── dist_public/
+    ├── LiquidMemory_AOTI_sm_89_L2048_trained.pt2     # RTX 40-series, L40
+    ├── LiquidMemory_AOTI_sm_90_L2048_trained.pt2     # H100, H200
+    ├── LiquidMemory_AOTI_sm_90_L4096_trained.pt2
+    ├── LiquidMemory_AOTI_sm_90_L8192_trained.pt2
+    ├── LiquidMemory_AOTI_sm_90_L16384_trained.pt2
+    ├── LiquidMemory_AOTI_sm_90_L32768_trained.pt2
+    └── LiquidMemory_AOTI_sm_90_L65536_trained.pt2    # the long-context artifact
 ```
 
-Or, if you prefer to host the binaries elsewhere:
+Each `.pt2` is compiled for a specific GPU compute capability and a specific
+sequence length. The loader picks the right one at runtime based on the host
+GPU and the input shape. If your deployment target is missing from the
+shipped set, contact the Liquid Memory team to request a build for that arch.
 
-```bash
-export LM_LIB_PATH=/opt/liquid_memory/bin
+Or, if you prefer to host the artifacts in a different directory:
+
+```python
+attn = LiquidMemory(d_model=512, num_heads=8, artifact_dir="/opt/liquid_memory/dist")
 ```
-
-`liquid_memory.py` will discover `LiquidMemory_AOTI.so` and
-`liquid_memory_auth.so` under that directory on first construction.
 
 ### Verifying the install
 
@@ -56,15 +64,23 @@ export LM_LIB_PATH=/opt/liquid_memory/bin
 import torch
 from liquid_memory import LiquidMemory
 
-attn = LiquidMemory(512, 8).cuda().bfloat16()
-x = torch.randn(2, 1024, 512, device="cuda", dtype=torch.bfloat16)
+attn = LiquidMemory(embed_dim=512, num_heads=8, batch_first=True)
+x = torch.randn(1, 2048, 512, device="cuda", dtype=torch.float32)
 y, _ = attn(x, x, x, is_causal=True)
 assert y.shape == x.shape
 print("Liquid Memory ready.")
 ```
 
-If you see `LiquidMemoryError: Environment variable LM_PRIVATE_KEY is not set`,
-skip ahead to **Provisioning the auth key**.
+On first forward the loader prints the path of the artifact it picked:
+
+```
+[liquid_memory_loader] loading dist_public/LiquidMemory_AOTI_sm_90_L2048_trained.pt2
+```
+
+If you see `FileNotFoundError: No artifact matching arch sm_XX in dist_public/`,
+the shipped artifact set does not include your GPU's compute capability.
+Contact the Liquid Memory team for a build, or compile from source with
+the `build_matrix.py` tool included in the engineering repository.
 
 ---
 
