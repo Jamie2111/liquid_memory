@@ -84,34 +84,43 @@ the `build_matrix.py` tool included in the engineering repository.
 
 ---
 
-## 2. Provisioning the auth key
+## 2. Licensing and integrity
 
-Liquid Memory's compiled kernel will not execute without a valid Ed25519
-signature. Your Liquid Memory account representative issues a 32-byte private
-key seed (hex or base64). Inject it into the process environment **before
-constructing any `LiquidMemory` module**:
+### Integrity verification (active today)
 
-```bash
-export LM_PRIVATE_KEY="$(cat /etc/secrets/liquid_memory.key)"
+`liquid_memory_loader.py` verifies each `.pt2`'s SHA-256 against
+`dist_public/MANIFEST.md` before loading it. A tampered or unknown
+artifact is refused with a `RuntimeError` and never executed. AOTI
+artifacts contain compiled native code, so this check is the runtime
+boundary that ensures only artifacts whose hashes you have audited
+ever run in your process. The manifest is human-readable; we recommend
+pinning your install to a specific repo commit and pre-computing
+sha256s out-of-band as defense in depth.
+
+To override (local development only, at your own risk):
+
+```python
+from liquid_memory import LiquidMemory
+attn = LiquidMemory(d_model, n_heads, verify_artifact=False)
 ```
 
-Recommended patterns by deployment style:
+### License-key enforcement (roadmap, not active)
 
-| Environment        | Recommended secret store                                 |
-| ------------------ | -------------------------------------------------------- |
-| Local dev          | `.env` file ignored by git, loaded via `direnv` or similar |
-| Docker / k8s       | Kubernetes Secret mounted as env var                     |
-| AWS                | Secrets Manager → ECS task definition env                |
-| GCP                | Secret Manager → Cloud Run env                           |
-| Hugging Face Spaces | Repository secret named `LM_PRIVATE_KEY`                |
+The published `liquid_memory_auth.so` registers a
+`torch.ops.liquid_memory_auth` namespace as the integration surface
+for an Ed25519 signed-launch check. Signature verification is **not
+currently enforced**; current artifacts are gated by repository access
+only.
 
-**Do not** commit the key to source control. **Do not** log it. The Python
-shell never persists the key beyond the moment of signing; the signing path
-is local and offline.
+The enforcement layer is on the roadmap. When it ships, an
+`LM_PRIVATE_KEY` environment variable carrying a 32-byte Ed25519 seed
+(provisioned by your Liquid Memory account contact) will be required
+to construct a `LiquidMemory(...)` module. Until then, this section
+documents the planned interface so customers can budget for it; it is
+not a current installation step.
 
-The challenge token has a short freshness window (clocks are validated
-against NTP-typical drift). If you see auth gate rejections in production,
-confirm `chronyd`/`systemd-timesyncd` is healthy on the host.
+If you require enforced runtime licensing today, email the founders
+before integrating - we can fast-track a customer-specific build.
 
 ---
 
@@ -290,10 +299,8 @@ materialize attention weights.
 
 | Symptom                                                          | Resolution                                                                                                  |
 | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `Liquid Memory backend not found at …`                           | Set `LM_LIB_PATH` to the directory containing the `.so` files, or place them under `<package>/bin/`.        |
-| `Environment variable LM_PRIVATE_KEY is not set`                 | Inject your provisioned Ed25519 seed into the process env. See § 2.                                         |
-| `auth gate rejected the signed token`                            | (1) Key mismatch — confirm seed; (2) clock drift — run `chronyc tracking` / `timedatectl`; (3) expired license. |
-| `Liquid Memory requires the cryptography package`                | `pip install cryptography`.                                                                                 |
+| `No artifact matching arch sm_XX in dist_public/…`               | The shipped artifact set does not include a build for your GPU's compute capability. Contact us for a build, or compile from source. |
+| `sha256 mismatch for …` or `No sha256 entry for …`               | The loader refused to load a `.pt2` whose hash is not in `MANIFEST.md`. The artifact has been tampered with or the manifest is stale; do not bypass without auditing. See § 2 (Integrity verification). |
 | `Batch size changed from N to M without an intervening reset_state()` | Call `attn.reset_state()` between independent generation streams or batch reconfigurations.                  |
 | `Sequence length X exceeds the supported maximum of 131072`      | Out of the supported window. Contact support for extended-context licensing.                                 |
 

@@ -66,6 +66,7 @@ class LiquidMemory(nn.Module):
         dtype=None,
         *,
         artifact_dir: str = "dist_public",
+        verify_artifact: bool = True,
         **_unused,
     ):
         super().__init__()
@@ -90,6 +91,11 @@ class LiquidMemory(nn.Module):
         self.num_heads = num_heads
         self.batch_first = batch_first
         self.artifact_dir = artifact_dir
+        # SHA-256 integrity check against dist_public/MANIFEST.md is on
+        # by default. AOTI artifacts are compiled native code, so loading
+        # one without verifying its hash is functionally arbitrary code
+        # execution. Only set verify_artifact=False in trusted dev loops.
+        self.verify_artifact = verify_artifact
 
         # (seq_len, device_name) -> loaded AOTICompiledModel
         self._artifact_cache: dict = {}
@@ -110,6 +116,7 @@ class LiquidMemory(nn.Module):
         artifact = _load_artifact(
             search_dir=self.artifact_dir,
             seq_len=seq_len,
+            verify=self.verify_artifact,
         )
         self._artifact_cache[key] = artifact
         return artifact

@@ -20,10 +20,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import torch
 
@@ -46,6 +47,85 @@ def _parse_artifact_name(path: Path) -> Optional[Tuple[str, Optional[str]]]:
     if not m:
         return None
     return (m.group(1), m.group(2))
+
+
+def _parse_manifest_sha256(manifest_path: Path) -> Dict[str, str]:
+    """Read dist_public/MANIFEST.md and return {filename: sha256_hex}.
+
+    Lines like  `LiquidMemory_AOTI_sm_90_L2048_trained.pt2  sha256=<hex64>`
+    are parsed; everything else is ignored. Returns an empty dict if the
+    manifest file is absent (callers decide whether that is acceptable).
+    """
+    table: Dict[str, str] = {}
+    if not manifest_path.exists():
+        return table
+    line_re = re.compile(
+        r"^\s*([A-Za-z0-9_.\-]+\.(?:pt2|so))\s+sha256=([0-9a-fA-F]{64})\s*$"
+    )
+    for line in manifest_path.read_text().splitlines():
+        m = line_re.match(line)
+        if m:
+            table[m.group(1)] = m.group(2).lower()
+    return table
+
+
+def _sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    """Compute the sha256 hex digest of a file. Streamed so we never
+    materialize the whole artifact (some are ~8 MB; the function is
+    cheap but writing it streamed is just good form)."""
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def verify_artifact_integrity(
+    path: Path, manifest_path: Optional[Path] = None
+) -> None:
+    """Refuse to return unless `path`'s sha256 matches the MANIFEST entry.
+
+    AOTI artifacts contain compiled native code that runs in the loading
+    process. Loading one is functionally equivalent to executing it. If
+    an attacker can drop a .pt2 into dist_public/ (supply-chain attack,
+    repo tampering, transport tampering on download), they get code
+    execution at first import. The MANIFEST.md table is the authoritative
+    sha256 catalog; this function closes the loop by refusing to load any
+    artifact whose hash is missing from or differs from the manifest.
+
+    Raises RuntimeError on a missing manifest entry or a hash mismatch.
+    Returns silently on success.
+    """
+    if manifest_path is None:
+        manifest_path = path.parent / "MANIFEST.md"
+    table = _parse_manifest_sha256(manifest_path)
+    if not table:
+        raise RuntimeError(
+            f"MANIFEST.md not found or has no sha256 entries: {manifest_path}. "
+            f"Refusing to load {path.name}: every shipped artifact must have a "
+            f"declared sha256. Run with verify=False ONLY if you accept the "
+            f"risk that a tampered .pt2 will execute arbitrary native code."
+        )
+    expected = table.get(path.name)
+    if expected is None:
+        raise RuntimeError(
+            f"No sha256 entry for {path.name} in {manifest_path}. "
+            f"This artifact is unknown to the manifest. Add an entry or rebuild. "
+            f"Refusing to load (use verify=False to override)."
+        )
+    actual = _sha256_file(path)
+    if actual.lower() != expected.lower():
+        raise RuntimeError(
+            f"sha256 mismatch for {path.name}.\n"
+            f"  expected (MANIFEST.md): {expected}\n"
+            f"  actual   (on disk)    : {actual}\n"
+            f"The artifact has been tampered with or the MANIFEST is stale. "
+            f"Refusing to load. If you just rebuilt the artifact, update "
+            f"MANIFEST.md to the new sha256."
+        )
 
 
 def find_artifact(
@@ -107,13 +187,22 @@ def load(
     search_dir: str = "dist_public",
     arch: Optional[str] = None,
     seq_len: Optional[int] = None,
+    verify: bool = True,
 ):
     """Load the AOTI artifact for the current GPU.
 
     Returns an AOTICompiledModel that you call with a single input
     tensor of shape (B, L, d_model), fp32, on CUDA.
+
+    `verify=True` (default) refuses to load any .pt2 whose sha256 does
+    not match its entry in dist_public/MANIFEST.md. AOTI artifacts are
+    compiled native code, so loading one is code execution; we will not
+    do it without a hash check. Pass verify=False to disable - only do
+    so in trusted local development.
     """
     path = find_artifact(search_dir=search_dir, arch=arch, seq_len=seq_len)
+    if verify:
+        verify_artifact_integrity(path)
     print(f"[liquid_memory_loader] loading {path}")
     loaded = torch._inductor.aoti_load_package(str(path))
     return loaded
@@ -154,6 +243,12 @@ def _cli() -> int:
     try:
         path = find_artifact(search_dir=str(search))
         print(f"selected: {path}")
+        try:
+            verify_artifact_integrity(path)
+            print(f"sha256:   verified against MANIFEST.md")
+        except RuntimeError as e:
+            print(f"sha256:   FAILED ({e}).")
+            return 1
         loaded = torch._inductor.aoti_load_package(str(path))
         print(f"loaded type: {type(loaded).__name__}")
         return 0

@@ -87,7 +87,7 @@ In practice, the pattern looks like this:
 
 ## The ROI
 
-Liquid Memory is designed to produce **up to 99% token compression** before the cloud call. A document that would normally consume tens of thousands of remote prompt tokens can be reduced to a compact evidence bundle with only the useful facts preserved.
+Liquid Memory produces **~5.7x compression** (about 80-82% fewer tokens billed) on holistic workloads before the cloud call. A document that would normally consume tens of thousands of remote prompt tokens is reduced to a compact evidence bundle with the task-relevant facts preserved. Note: the compression is fact-preserving but **lossy at the document level**, so it fits summary-, content-, and study-shaped tasks rather than exact-recall tasks like citation lookup or precise numerical extraction.
 
 The local stage is optimized for throughput with **vLLM PagedAttention**, which improves GPU memory efficiency and keeps large-document extraction fast enough for live enterprise workflows. The result is a system that lowers cloud spend, improves privacy posture, and still preserves answer quality by sending the synthesis model only what it needs.
 
@@ -445,7 +445,9 @@ Sample output (H100, BF16):
 
 ## Licensing
 
-The compiled kernel and the `liquid_memory.py` wrapper module are distributed under a commercial license. The compiled artifacts in `dist_public/` are publicly readable so you can verify SHA-256 against `MANIFEST.md` before installation, but executing the kernel requires a provisioned Ed25519 license key set via `LM_PRIVATE_KEY` at process start.
+The compiled kernel and the `liquid_memory.py` wrapper module are distributed under a commercial license. The compiled artifacts in `dist_public/` are publicly readable; `liquid_memory_loader.py` verifies their SHA-256 against `MANIFEST.md` before loading and refuses to execute a tampered or unknown `.pt2`.
+
+**Enforcement layer (roadmap):** the published `liquid_memory_auth.so` registers a `torch.ops.liquid_memory_auth` namespace as the integration surface for an Ed25519 signed-launch check. Signature verification is **not currently enforced** at runtime; current artifacts are gated by repository access only. The license-enforcement layer is on the roadmap and will arrive in a future release. If you require enforced runtime licensing today, contact us before integrating.
 
 To request a license / pilot, email the founders (see Contact below).
 

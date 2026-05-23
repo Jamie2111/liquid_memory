@@ -109,6 +109,13 @@ liquid_memory_backend/
 # Override the *.so / *.pt2 / build-dir ignores so they actually get
 # tracked. Anything ELSE under dist_public/ stays ignored (no debug
 # builds, no .o files, no auth sources sneaking in).
+#
+# DISCIPLINE: Any file matched by the wildcard exception below MUST have
+# a corresponding sha256 entry in dist_public/MANIFEST.md before being
+# committed. liquid_memory_loader.py refuses to load any artifact whose
+# hash is not declared in the manifest, so an unrecorded .pt2 will fail
+# to load at the customer site even if it pushes cleanly. The wildcard
+# is for convenience, not for skipping the manifest update step.
 !dist_public/
 !dist_public/AOTI_METADATA.json
 !dist_public/MANIFEST.md
